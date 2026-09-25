@@ -1,5 +1,11 @@
 # Softly — Digital Journal Store
 
+> **Setup first?** Read **`config.txt`** — it explains every `.env` variable: what it
+> is, where to get it, and a ProTip per step. Then run `./scripts/db-setup.sh`
+> (connectivity check + `drizzle-kit push` + table verification, URL never printed).
+> Admin login lives in `.env` as `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
+
+
 A full-stack digital journal storefront and admin studio built with Next.js App Router, TypeScript, PostgreSQL/Drizzle, Stripe Checkout, and optional Cloudflare R2/S3-compatible storage and Resend email.
 
 ## Preview mode
