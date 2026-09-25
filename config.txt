@@ -1,260 +1,1023 @@
 ================================================================================
- SOFTLY — CONFIG.TXT
- The coder's guide to every value that goes into `.env`
- Each step: WHAT it is -> WHERE to get it -> PRO TIP.
+SOFTLY — CONFIG.TXT
 ================================================================================
-
+The coder's guide to every value used in .env
+Each section explains: WHAT it is -> WHERE to get it -> PRO TIP.
 HOW TO USE THIS FILE
-  1. Copy `.env.example` to `.env` (real secrets live ONLY in `.env`).
-  2. Work through the sections below in order (Section 1 is mandatory).
-  3. Restart the app after every change — Next.js caches env vars at boot.
-  4. Verify with the checklist at the end.
+Copy .env.example to .env:
 
-SECURITY RULES (read once, follow forever)
-  * `.env` is gitignored and chmod 600. Never commit it, never `git add -f .env`.
-  * NEVER paste a connection string / API key / password into chat, GitHub
-    issues, pull requests, screenshots, screen recordings, Discord, or a
-    shared terminal (it lands in shell history + CI logs).
-  * NEVER hardcode secrets in src/ "just to test" — always process.env.X.
-  * NEVER run `drizzle-kit push --url="postgresql://..."` on the command line.
-  * INCIDENT NOTE: a Neon password was pasted into chat earlier and was later
-    rejected by the server (28P01 = invalid password) — it was rotated/stale.
-    If you still see that string anywhere: rotate it in Neon now.
+cp .env.example .env
 
---------------------------------------------------------------------------------
- SECTION 1 — DATABASE (required; nothing else works without it)
---------------------------------------------------------------------------------
+Work through the sections below in order.
+Section 1 (database) is mandatory.
 
-1.1  DATABASE_URL
-     WHAT:   PostgreSQL connection string. Used by Drizzle (`src/db/index.ts`)
-             and by `drizzle-kit` (see `drizzle.config.ts`).
-     WHERE:  Neon console -> your project -> **Connect** tab. Two URLs are offered:
-               - POOLED   (host contains `-pooler`)  -> for the APP on serverless
-                                                        (Vercel / Cloudflare)
-               - DIRECT   (host has no `-pooler`)    -> for `drizzle-kit push`,
-                                                        migrations, and this
-                                                        long-running preview
-             Local sandbox alternative:
-               postgresql://postgres:postgres@127.0.0.1:5432/app_db
-     FORMAT: postgresql://USER:PASSWORD@HOST/DATABASE?sslmode=verify-full
-     PRO TIP: always append `?sslmode=verify-full`. It verifies the server's TLS
-              certificate and hostname (it also silences the pg SSL warning).
-              `require`/`prefer` are weaker and will change behaviour in pg v9.
+After every .env change, restart the Next.js server.
+Environment variables are loaded at application startup.
 
-1.2  Rotating / activating Neon (do this when a URL is rejected)
-     Symptom: `28P01 password authentication failed`  (the pasted URL is dead)
-     Steps:
-       1. Neon -> your project -> Roles -> neondb_owner -> Reset password.
-       2. Connect -> copy the URL -> paste it into `.env` (DATABASE_URL only).
-       3. Run `./scripts/db-setup.sh` — it checks connectivity, pushes the schema
-          and lists all 19 tables WITHOUT printing your URL.
-     PRO TIP: before any schema change, create a Neon **Branch** — that's an
-              instant backup you can restore from if `push` does something
-              unexpected (push can drop columns silently).
+Never commit .env.
+This config.txt file is safe to commit because it contains instructions,
+not live credentials.
 
-1.3  Applying schema (pick ONE workflow per environment)
-       local/dev : `npx drizzle-kit push`            (interactive)
-       CI/pipes  : `npx drizzle-kit push --force`    (auto-approves)
-       production: `npx drizzle-kit generate` + `npx drizzle-kit migrate`
-                   (versioned migration files committed to git)
-     Pro: `drizzle.config.ts` loads dotenv itself, so NO `--url`, `--dialect`
-          or `--schema` flags are ever required again.
-     PRO TIP: never mix `push` and `migrate` on the same database — the
-              migration history and the live schema will drift apart.
+Run the verification checklist at the end before deployment.
 
-1.4  Checking tables
-       ./scripts/db-setup.sh            (lists tables + row counts)
-       psql "$DATABASE_URL" -c "\dt"    (never echo the URL itself)
-       Neon -> SQL Editor               (visual)
-     PRO TIP: the catalog seeds itself on the FIRST page request. If counts are
-              0 right after `push`, start the app and load `/` once.
+SECURITY RULES
+.env and .env.local are gitignored.
 
---------------------------------------------------------------------------------
- SECTION 2 — ACCESS & SECRETS (mandatory for production)
---------------------------------------------------------------------------------
+Never commit .env, even with git add -f.
 
-2.1  ADMIN_EMAIL  /  ADMIN_PASSWORD
-     WHAT:   Your private admin login for `/admin/login`.
-             Setting BOTH disables the public preview admin automatically, and
-             later edits to ADMIN_PASSWORD rotate the stored hash on restart.
-     WHERE:  Invent them. ADMIN_EMAIL = a real mailbox you control.
-             ADMIN_PASSWORD = a long random string (16+ chars).
-             Generate one:  openssl rand -base64 24
-     PRO TIP: read them from `.env`, not from chat — don't paste passwords into
-              this guide, a README, or a screenshot. Change them after any
-              handoff or staff change (edit `.env`, restart, done).
+If possible, use chmod 600 on .env:
 
-2.2  DOWNLOAD_SECRET
-     WHAT:   Signs expiring guest download + online-reading links so they
-             can't be guessed or forged.
-     WHERE:  openssl rand -hex 32   (paste the output into `.env`)
-     PRO TIP: set it once and keep it STABLE — changing it instantly invalidates
-              every existing guest link (registered account holders are fine).
-              Back it up in your password manager before rotating.
+chmod 600 .env
 
-2.3  NEXT_PUBLIC_SITE_URL  /  SITE_URL
-     WHAT:   The canonical HTTPS origin of your site. Used for password-reset +
-             order emails, Stripe success/cancel redirects, sitemap.xml and
-             robots.txt. NEXT_PUBLIC_* is also visible to the browser (expected
-             here — it's public, not a secret).
-     WHERE:  Your deployed domain, e.g. https://www.yourdomain.com
-     PRO TIP: scheme + domain, NO trailing slash. A wrong value silently sends
-              customers to `localhost` links in emails and Stripe redirects —
-              set it BEFORE going live and test a password reset.
+NEVER paste DATABASE_URL, API keys, passwords, or other secrets into:
 
---------------------------------------------------------------------------------
- SECTION 3 — PAYMENTS (Stripe)
---------------------------------------------------------------------------------
+Chat
 
-3.1  STRIPE_SECRET_KEY
-     WHAT:   Server-side secret that creates PaymentIntents/Checkout Sessions.
-     WHERE:  dashboard.stripe.com -> Developers -> API keys -> "Reveal" secret key
-             (sk_test_... in test mode, sk_live_... in live mode)
-     PRO TIP: keep the account in TEST mode until your first successful
-              end-to-end purchase; only then swap to sk_live_.
+GitHub issues
 
-3.2  STRIPE_WEBHOOK_SECRET
-     WHAT:   Verifies the digital signature of every Stripe webhook — this is
-             what unlocks paid orders. Without it checkout returns 503.
-     WHERE:  dashboard.stripe.com -> Developers -> Webhooks -> Add endpoint
-               URL:  https://YOUR-DOMAIN/api/webhooks/stripe
-             Events: payment_intent.succeeded, payment_intent.payment_failed,
-                     checkout.session.completed,
-                     checkout.session.async_payment_succeeded,
-                     checkout.session.async_payment_failed, charge.refunded
-             Then open the endpoint and copy the Signing secret (whsec_...).
-     PRO TIP: the webhook secret is PER ENDPOINT (per domain + per mode). A local
-              `stripe listen` secret will NOT validate live traffic — copy the
-              exact one for the endpoint you created.
+Pull requests
 
-3.3  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
-     WHAT:   Loads Stripe.js + the on-page card form (cards, Apple Pay, Google
-             Pay, Link). If empty, checkout falls back to Stripe's hosted page.
-     WHERE:  Same API-keys page -> publishable key (pk_test_... / pk_live_...)
-     PRO TIP: this key is safe to expose in the browser by design. Never put the
-              *secret* key in a NEXT_PUBLIC_ variable — it would ship to users.
+Screenshots
 
-3.4  ENABLE_DEMO_CHECKOUT
-     WHAT:   Set `false` to hard-disable preview checkout once payments are live.
-             Empty/unset = demo mode ON automatically while no Stripe key exists.
-     PRO TIP: deploy with it empty first; flip to `false` only after a real test
-              charge succeeds, so customers never hit a dead checkout.
+Screen recordings
 
-     The app will not accept real money until 3.1 + 3.2 (and ideally 3.3) are set.
+Discord
 
---------------------------------------------------------------------------------
- SECTION 4 — EMAIL (Resend)
---------------------------------------------------------------------------------
+Public documentation
 
-4.1  RESEND_API_KEY
-     WHAT:   Sends all transactional email: welcome, verify, password reset,
-             order confirmation + secure link, refund notice, contact replies.
-     WHERE:  resend.com -> free account -> API Keys -> create -> copy (re_...)
-     PRO TIP: put it in `.env` only; it's a server-side secret. Revoke + reissue
-              if it ever appears in a log or screenshot.
+Shared terminals
 
-4.2  EMAIL_FROM
-     WHAT:   The From header: "Your Brand <address@yourdomain.com>"
-     WHERE:  resend.com -> Domains -> Add domain -> verify DNS (SPF + DKIM) ->
-             then use an address on that domain, e.g. "Softly <hi@yourdomain.com>"
-     PRO TIP: until your domain is verified, only `onboarding@resend.dev` works,
-              and it may only send to your own account email — verify the domain
-              BEFORE testing order emails, or messages silently fail to deliver.
+CI logs
 
-     Without email, the store still works: customers use the secure link on the
-     confirmation page; emails simply aren't sent (shown as "not configured").
+NEVER hardcode secrets in src/ just to test something.
+Always use process.env.X.
 
---------------------------------------------------------------------------------
- SECTION 5 — PRIVATE FILE STORAGE (Cloudflare R2 / S3)
---------------------------------------------------------------------------------
+NEVER run:
 
-     PDFs and uploaded images must NOT be public. These four values store them
-     in private object storage and serve them through authorized routes.
-     Without them, files go to local disk (fine for one persistent server,
-     NOT for serverless — files disappear on redeploy).
+drizzle-kit push --url="postgresql://..."
 
-5.1  R2_ENDPOINT
-     WHAT:   The S3 API endpoint for your bucket.
-     WHERE:  dash.cloudflare.com -> R2 -> create bucket -> Manage R2 API Token
-             Endpoint looks like: https://<ACCOUNT_ID>.r2.cloudflarestorage.com
-5.2  R2_ACCESS_KEY_ID       <- created with the R2 API token
-5.3  R2_SECRET_ACCESS_KEY   <- shown ONCE at token creation; store it safely
-5.4  R2_BUCKET              <- the bucket name you created (e.g. softly-files)
-     PRO TIP: scope the API token to that ONE bucket with Object Read & Write
-              only. Never issue an account-wide token. Region must be `auto`.
+Connection strings can remain in shell history and CI logs.
 
---------------------------------------------------------------------------------
- SECTION 6 — RUNTIME
---------------------------------------------------------------------------------
+NEVER put a secret into a NEXT_PUBLIC_* environment variable.
+NEXT_PUBLIC_* values are exposed to the browser.
 
-6.1  NODE_ENV
-     WHAT:   `production` (set by the host), `development`, `test`.
-     WHERE:  Usually unset locally; hosts set it automatically.
-     PRO TIP: don't set it manually in `.env` — it changes cookie flags
-              (session cookies become Secure) and Next.js build behaviour.
-             Also controls whether session cookies are marked `Secure`.
+If a password or API key has ever been exposed, rotate it immediately.
 
---------------------------------------------------------------------------------
- HOW TO APPLY CHANGES
---------------------------------------------------------------------------------
-   Local      : edit `.env`  -> restart (`npm run dev` / rebuild). Done.
-   Vercel     : Project -> Settings -> Environment Variables -> add the SAME
-                names for all three scopes: Production, Preview, Development.
-                Local `.env` does NOT ship to Vercel.
-   Secrets    : treat every value as secret except NEXT_PUBLIC_*.
-   CI         : inject as environment variables; never write them into files
-                that are checked in.
+Treat all production credentials as compromised if they appear in:
 
---------------------------------------------------------------------------------
- VERIFICATION CHECKLIST (run in order)
---------------------------------------------------------------------------------
-   [ ] 1. `node -e "require('dotenv').config();console.log(!!process.env.DATABASE_URL)"`
-          -> prints `true` (and never the URL itself)
-   [ ] 2. `./scripts/db-setup.sh`
-          -> "connected", tables (19), counts non-zero
-   [ ] 3. `npx next typegen` && `npx tsc --noEmit`
-          -> no output = clean
-   [ ] 4. `npm run build` -> all routes compile
-   [ ] 5. Start app, open `/` -> no `relation "..." does not exist`
-   [ ] 6. `curl -s localhost:3000/api/health` -> {"ok":true}
-   [ ] 7. `/admin/login` with ADMIN_EMAIL + ADMIN_PASSWORD -> dashboard loads
-   [ ] 8. Admin -> Settings -> integrations: Stripe / Email / Storage as expected
-   [ ] 9. Place a test order (preview mode) -> receipt + reader + PDF work
+Git history
 
---------------------------------------------------------------------------------
- TROUBLESHOOTING — always read the stack trace BOTTOM-UP
---------------------------------------------------------------------------------
-   28P01  password authentication failed  -> password rotated/wrong; reset it
-          in Neon -> Roles, paste new URL into `.env`, rerun scripts/db-setup.sh
-   3D000  database does not exist         -> wrong database name in the URL
-   ETIMEDOUT / ENOTFOUND                  -> endpoint typo, or direct host used
-                                             from serverless (use the -pooler host)
-   "relation ... does not exist"          -> schema not pushed; run the setup
-          script, then check the failing table name in the trace
-   "url required" from drizzle-kit        -> `drizzle.config.ts` not being read;
-          confirm the file exists and has `import "dotenv/config"` (no JSON config)
-   Payment says "not configured"          -> 3.1 + 3.2 missing (3.3 for card form)
-   Emails never arrive                    -> 4.1 missing or 4.2 domain unverified
-   Uploads vanish after redeploy          -> Section 5 (R2) not configured
-   Changed an env var, nothing happened   -> restart the server; env is cached
-   404 on an image = asset path issue     500 = state/DB issue -> fix 500s first
+Logs
 
---------------------------------------------------------------------------------
- NEVER DO
---------------------------------------------------------------------------------
-   x Paste DATABASE_URL / API keys / passwords into chat, git, issues, screenshots
-   x Commit `.env`, `.env.local`, or any file containing `npg_` / `sk_` / `re_`
-   x Hardcode a connection string in src/db/index.ts
-   x Put a secret in a NEXT_PUBLIC_ variable
-   x Run `push` against production without a Neon branch/backup first
-   x Mix `push` and `migrate` workflows on one database
-   x Use the direct (non-pooled) Neon host inside serverless functions
-   x Deploy to Vercel without setting the env vars there (local .env won't ship)
-   x Use Vercel Hobby for a commercial store (against their ToS)
-   x Ignore the pg SSL warning in production -> use sslmode=verify-full
-   x Run the seed blindly in production (it won't overwrite edits, but check first)
+Screenshots
+
+Chat messages
+
+Public repositories
+
+Shared terminals
 
 ================================================================================
- Still stuck? Start at the LAST line of the trace and work up — the root cause
- is almost always there. Then re-run: ./scripts/db-setup.sh
+SECTION 1 — DATABASE
+Required. The application cannot work without a database.
+1.1 DATABASE_URL
+WHAT IT IS
+
+  The PostgreSQL connection string used by the running Next.js application.
+
+  The application reads it through:
+
+      process.env.DATABASE_URL
+
+  It is used by `src/db/index.ts`.
+
+FOR NEON
+
+  Use the POOLED connection for the running application.
+
+  The Neon hostname normally contains:
+
+      -pooler
+
+  Example format:
+
+      postgresql://USER:PASSWORD@ep-xxxx-pooler.REGION.aws.neon.tech/neondb?sslmode=require
+
+WHERE TO GET IT
+
+  1. Open the Neon console.
+  2. Open your project.
+  3. Open Connection Details / Connect.
+  4. Enable Pooled Connection.
+  5. Copy the connection URI.
+  6. Put it in `.env` as:
+
+       DATABASE_URL=...
+
+PRO TIPS
+
+  * Use the pooled host for serverless environments such as Vercel.
+  * Do not expose this value to the browser.
+  * Keep the password URL-encoded if it contains special characters.
+  * `sslmode=require` is the practical Neon default.
+  * `sslmode=verify-full` provides stricter certificate/hostname
+    verification, but use it only when the runtime and certificate
+    configuration support it correctly.
+
+LOCAL ALTERNATIVE
+
+  A local PostgreSQL installation can use something like:
+
+      postgresql://postgres:postgres@127.0.0.1:5432/app_db?sslmode=require
+
+  Adjust the username, password, host, port, and database as needed.
+
+1.2 DATABASE_URL_DIRECT
+WHAT IT IS
+
+  The direct, non-pooled PostgreSQL connection used by Drizzle Kit.
+
+  `drizzle.config.ts` should read this value for schema operations and
+  fall back to `DATABASE_URL` if it is not provided.
+
+FOR NEON
+
+  In Neon Connection Details:
+
+    Pooled connection: OFF
+
+  The hostname should NOT contain:
+
+      -pooler
+
+  Example:
+
+      postgresql://USER:PASSWORD@ep-xxxx.REGION.aws.neon.tech/neondb?sslmode=require
+
+PUT IT IN .env AS:
+
+  DATABASE_URL_DIRECT=...
+
+PRO TIPS
+
+  * Keep the direct URL out of normal application runtime code.
+  * Use the pooled URL for the Next.js application.
+  * Use the direct URL for Drizzle schema/migration operations.
+  * Never pass the database URL with `--url` on the command line.
+  * `drizzle.config.ts` should load dotenv automatically.
+
+1.3 ROTATING / ACTIVATING NEON
+If PostgreSQL reports:
+
+  28P01 password authentication failed
+
+the database password is probably incorrect, expired, or has been rotated.
+
+STEPS:
+
+  1. Open Neon.
+  2. Open the project.
+  3. Open Roles.
+  4. Reset the password for the appropriate database role.
+  5. Copy fresh pooled and direct connection strings.
+  6. Update:
+
+       DATABASE_URL
+       DATABASE_URL_DIRECT
+
+  7. Run:
+
+       ./scripts/db-setup.sh
+
+PRO TIP
+
+  Before important production schema changes, create a Neon Branch.
+
+  A branch gives you a recoverable database snapshot before making
+  potentially destructive schema changes.
+
+1.4 APPLYING THE DATABASE SCHEMA
+DEVELOPMENT:
+
+  npx drizzle-kit push
+
+CI / AUTOMATED ENVIRONMENT:
+
+  npx drizzle-kit push --force
+
+PRODUCTION:
+
+  npx drizzle-kit generate
+  npx drizzle-kit migrate
+
+IMPORTANT
+
+  Pick ONE schema-management workflow for each environment.
+
+  Do not casually mix `push` and `migrate` against the same database.
+  Mixing them can cause migration history and live schema state to drift.
+
+drizzle.config.ts should load .env itself, so these commands should not
+require --url, --dialect, or --schema flags.
+
+1.5 CHECKING THE DATABASE
+Preferred project check:
+
+  ./scripts/db-setup.sh
+
+Direct PostgreSQL check:
+
+  psql "$DATABASE_URL_DIRECT" -c "\dt"
+
+Neon:
+
+  Use the Neon SQL Editor.
+
+PRO TIP
+
+  The storefront seeds catalog/sample/FAQ/coupon/admin data on the first
+  appropriate storefront request.
+
+  If the database schema exists but seed data is empty, start the app and
+  load `/` once.
+
 ================================================================================
+SECTION 2 — ADMIN ACCESS & SECURITY SECRETS
+2.1 ADMIN_EMAIL
+WHAT IT IS
+
+  The private administrator email used to sign in at:
+
+      /admin/login
+
+WHERE TO GET IT
+
+  Choose an email address you control.
+
+EXAMPLE:
+
+  ADMIN_EMAIL=admin@yourdomain.com
+
+2.2 ADMIN_PASSWORD
+WHAT IT IS
+
+  The private administrator password.
+
+WHERE TO GET IT
+
+  Generate a strong random password:
+
+      openssl rand -base64 24
+
+PRO TIPS
+
+  * Set ADMIN_EMAIL and ADMIN_PASSWORD together.
+  * Do not set only one of them.
+  * Never reuse this password elsewhere.
+  * Store it in a password manager.
+  * Do not put it into README files, screenshots, chat, or source code.
+  * Change it after staff changes or project handoffs.
+
+When both values are configured, the public preview admin account is
+disabled/overridden.
+
+2.3 DOWNLOAD_SECRET
+WHAT IT IS
+
+  A long random secret used to sign expiring guest download and
+  online-reading links.
+
+WHERE TO GET IT
+
+  Generate one with:
+
+      openssl rand -hex 32
+
+  Then put the result into `.env`:
+
+      DOWNLOAD_SECRET=...
+
+PRO TIPS
+
+  * Set this explicitly in production.
+  * Keep it stable after launch.
+  * Changing it invalidates existing guest receipt/download links.
+  * Store a backup in your password manager.
+  * Do not derive it from DATABASE_URL in production.
+
+If omitted, the application can derive a fallback from another server secret,
+but an explicit DOWNLOAD_SECRET is recommended for production.
+
+2.4 NEXT_PUBLIC_SITE_URL / SITE_URL
+WHAT THEY ARE
+
+  The canonical public HTTPS origin of the website.
+
+  Used for things such as:
+
+    - Stripe success/cancel redirects
+    - Password reset links
+    - Order emails
+    - Sitemap
+    - robots.txt
+    - SEO/OpenGraph URLs
+
+VALUES
+
+  Local:
+
+      http://localhost:3000
+
+  Preview:
+
+      https://your-project.vercel.app
+
+  Production:
+
+      https://www.yourdomain.com
+
+PRO TIPS
+
+  * Set both values to the same canonical origin.
+  * Do NOT add a trailing slash.
+  * Production should use HTTPS.
+  * Update both values after attaching a custom domain.
+  * Test password reset and Stripe redirects after changing them.
+
+IMPORTANT
+
+  `NEXT_PUBLIC_SITE_URL` is intentionally public because `NEXT_PUBLIC_*`
+  variables can be exposed to the browser.
+
+  `SITE_URL` is server-side and should not be treated as a browser secret
+  unless the application requires it to be secret.
+
+================================================================================
+SECTION 3 — PAYMENTS / STRIPE
+3.1 STRIPE_SECRET_KEY
+WHAT IT IS
+
+  Server-side Stripe secret used to create and manage payment operations.
+
+  Without it, the application runs in clearly labeled Preview Checkout mode
+  and does not charge real cards.
+
+WHERE TO GET IT
+
+  Stripe Dashboard
+    -> Developers
+    -> API Keys
+    -> Secret key
+
+TEST MODE:
+
+  sk_test_...
+
+LIVE MODE:
+
+  sk_live_...
+
+PRO TIPS
+
+  * Start with Stripe Test Mode.
+  * Do not put a live key into local development until you are ready.
+  * Never expose this value to the browser.
+  * Rotate the key immediately if it is exposed.
+
+3.2 STRIPE_WEBHOOK_SECRET
+WHAT IT IS
+
+  The signing secret used to verify Stripe webhook requests.
+
+  Paid orders are fulfilled only after a cryptographically verified
+  webhook. A browser redirect must NEVER be trusted as proof of payment.
+
+LOCAL TESTING
+
+  With the Stripe CLI:
+
+      stripe listen --forward-to localhost:3000/api/webhooks/stripe
+
+  Copy the `whsec_...` value printed by the CLI.
+
+PRODUCTION
+
+  Stripe Dashboard
+    -> Developers
+    -> Webhooks
+    -> Add endpoint
+
+  Endpoint:
+
+      https://YOUR-DOMAIN/api/webhooks/stripe
+
+Configure these events:
+
+  payment_intent.succeeded
+  payment_intent.payment_failed
+  checkout.session.completed
+  checkout.session.async_payment_succeeded
+  checkout.session.async_payment_failed
+  charge.refunded
+
+Then open the endpoint and copy its Signing Secret:
+
+  whsec_...
+
+PRO TIPS
+
+  * Test and Live modes have different webhook secrets.
+  * Each webhook endpoint has its own signing secret.
+  * A local Stripe CLI secret will not validate production webhooks.
+  * Never parse the request body before Stripe signature verification.
+
+3.3 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+WHAT IT IS
+
+  Browser-safe Stripe publishable key.
+
+  Enables the on-page Stripe Payment Element:
+
+    - Cards
+    - Apple Pay
+    - Google Pay
+    - Link
+
+  Card numbers go directly to Stripe and never pass through this server.
+
+WHERE TO GET IT
+
+  Stripe Dashboard
+    -> Developers
+    -> API Keys
+    -> Publishable key
+
+TEST:
+
+  pk_test_...
+
+LIVE:
+
+  pk_live_...
+
+PRO TIP
+
+  This key is designed to be public.
+
+  NEVER put:
+
+      STRIPE_SECRET_KEY
+
+  into a `NEXT_PUBLIC_*` variable.
+
+3.4 ENABLE_DEMO_CHECKOUT
+WHAT IT IS
+
+  Optional kill switch for preview/demo checkout.
+
+TO DISABLE DEMO CHECKOUT:
+
+  ENABLE_DEMO_CHECKOUT=false
+
+If unset, preview checkout can remain available when Stripe is not configured.
+
+PRO TIP
+
+  Disable demo checkout on public staging environments if you do not want
+  visitors generating preview orders.
+
+3.5 STRIPE PAYMENT REQUIREMENTS
+The application should not accept real payments until at minimum:
+
+  STRIPE_SECRET_KEY
+  STRIPE_WEBHOOK_SECRET
+
+are configured correctly.
+
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY is recommended when using the embedded
+Payment Element.
+
+Always perform a complete Stripe Test Mode purchase before switching to
+live credentials.
+
+================================================================================
+SECTION 4 — EMAIL / RESEND
+4.1 RESEND_API_KEY
+WHAT IT IS
+
+  Server-side Resend API key used for transactional email.
+
+  Examples include:
+
+    - Welcome emails
+    - Email verification
+    - Password resets
+    - Order confirmations
+    - Secure download/receipt links
+    - Refund notices
+    - Contact acknowledgements/replies
+
+WHERE TO GET IT
+
+  Resend Dashboard
+    -> API Keys
+    -> Create API Key
+
+  The key begins with:
+
+      re_...
+
+PRO TIPS
+
+  * Keep it server-side.
+  * Never expose it through NEXT_PUBLIC_*.
+  * Revoke and replace it if exposed.
+  * Use Resend for transactional email; use a dedicated marketing system
+    for large newsletter campaigns.
+
+4.2 EMAIL_FROM
+WHAT IT IS
+
+  The sender displayed on outgoing emails.
+
+EXAMPLE:
+
+  Softly <hello@yourdomain.com>
+
+WHERE TO GET IT
+
+  Verify your sending domain in Resend:
+
+    Resend
+      -> Domains
+      -> Add Domain
+      -> Configure DNS
+      -> Verify
+
+PRO TIPS
+
+  * The sending domain should be verified.
+  * Use an inbox you actually monitor, such as hello@ or orders@.
+  * During development, Resend's onboarding sender may be used according
+    to Resend's current restrictions.
+  * Production email should use your verified domain.
+
+WITHOUT RESEND
+
+  The store can still operate.
+
+  Customers can use the secure receipt link shown on the confirmation page,
+  but transactional emails will not be sent.
+
+================================================================================
+SECTION 5 — PRIVATE FILE STORAGE / CLOUDFLARE R2 / S3
+PDFs and uploaded images must NOT be publicly accessible.
+
+Production uploads should use private object storage and authorized
+application routes.
+
+Without object storage configuration, files may use local disk.
+
+Local disk is acceptable for a persistent single-server environment but
+should NOT be relied upon for ephemeral/serverless deployments because files
+can disappear after redeployments.
+
+5.1 R2_ENDPOINT
+WHAT IT IS
+
+  S3-compatible API endpoint for the R2 bucket.
+
+EXAMPLE:
+
+  https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+
+WHERE TO GET IT
+
+  Cloudflare Dashboard
+    -> R2
+    -> Create bucket / R2 overview
+    -> Manage R2 API Tokens
+
+5.2 R2_ACCESS_KEY_ID
+WHAT IT IS
+
+  Access key generated by the R2 API token.
+
+WHERE TO GET IT
+
+  Cloudflare
+    -> R2
+    -> Manage R2 API Tokens
+    -> Create API Token
+
+5.3 R2_SECRET_ACCESS_KEY
+WHAT IT IS
+
+  Secret portion of the R2 API credentials.
+
+IMPORTANT
+
+  It may be shown only once when the token is created.
+
+  Store it immediately in your password manager and `.env`.
+
+5.4 R2_BUCKET
+WHAT IT IS
+
+  Name of the private bucket containing uploaded files.
+
+EXAMPLE:
+
+  softly-private
+
+PRO TIPS
+
+  * Keep the bucket private.
+  * Never expose direct public PDF URLs.
+  * Scope the API token to only the required bucket.
+  * Grant only the permissions required by the application.
+  * Configure all four R2 variables together.
+
+5.5 S3-COMPATIBLE STORAGE
+Cloudflare R2 is recommended for the documented setup, but another
+S3-compatible provider can be used if the application supports it.
+
+Configure:
+
+  R2_ENDPOINT
+  R2_ACCESS_KEY_ID
+  R2_SECRET_ACCESS_KEY
+  R2_BUCKET
+
+according to the provider's S3-compatible API.
+
+================================================================================
+SECTION 6 — RUNTIME
+6.1 NODE_ENV
+WHAT IT IS
+
+  Runtime environment used by Node.js/Next.js.
+
+  Typical values:
+
+      development
+      test
+      production
+
+PRO TIP
+
+  Usually do NOT manually set NODE_ENV in `.env`.
+
+  Deployment platforms such as Vercel normally provide the appropriate
+  production environment automatically.
+
+  NODE_ENV can affect:
+
+    - Cookie Secure flags
+    - Next.js behavior
+    - Build behavior
+    - Runtime configuration
+
+================================================================================
+SECTION 7 — HOW TO APPLY ENVIRONMENT CHANGES
+LOCAL
+
+  Edit:
+
+      .env
+
+  Then restart:
+
+      npm run dev
+
+  or rebuild/restart the production process.
+
+VERCEL
+
+  Vercel Dashboard
+    -> Project
+    -> Settings
+    -> Environment Variables
+
+  Add the required variables to the appropriate:
+
+    - Production
+    - Preview
+    - Development
+
+  Local `.env` files do NOT automatically ship to Vercel.
+
+CI
+
+  Inject secrets through the CI environment.
+
+  Never generate committed files containing production credentials.
+
+GENERAL RULE
+
+  Every value is secret unless it is intentionally public.
+
+  `NEXT_PUBLIC_*` values are public by design.
+
+================================================================================
+SECTION 8 — VERIFICATION CHECKLIST
+[ ] 1. Confirm .env is ignored:
+
+    git check-ignore -v .env
+
+[ ] 2. Confirm DATABASE_URL exists without printing it:
+
+    node -e "require('dotenv').config();console.log(!!process.env.DATABASE_URL)"
+
+[ ] 3. Confirm DATABASE_URL_DIRECT exists:
+
+    node -e "require('dotenv').config();console.log(!!process.env.DATABASE_URL_DIRECT)"
+
+[ ] 4. Run database setup:
+
+    ./scripts/db-setup.sh
+
+[ ] 5. Verify the schema exists and expected tables are present.
+
+[ ] 6. Generate/check Next.js types:
+
+    npx next typegen
+
+[ ] 7. Run TypeScript:
+
+    npx tsc --noEmit
+
+[ ] 8. Build the application:
+
+    npm run build
+
+[ ] 9. Start the application and open:
+
+    /
+
+[ ] 10. Check the health endpoint:
+
+    curl -s localhost:3000/api/health
+
+  Expected:
+
+    {"ok":true}
+
+[ ] 11. Open:
+
+    /admin/login
+
+  Sign in using ADMIN_EMAIL and ADMIN_PASSWORD.
+
+[ ] 12. Check Admin -> Settings -> Integrations.
+
+  Confirm Stripe, Email, and Storage show the expected configuration.
+
+[ ] 13. Test a preview order if Stripe is not configured.
+
+  Verify:
+
+    - Receipt
+    - Reader
+    - PDF access
+    - Download limits
+
+[ ] 14. Before production, perform a complete Stripe Test Mode purchase.
+
+================================================================================
+SECTION 9 — TROUBLESHOOTING
+28P01
+password authentication failed
+
+  The database password is wrong, stale, or was rotated.
+
+  Fix:
+
+    1. Reset the database role password in Neon.
+    2. Copy fresh connection strings.
+    3. Update DATABASE_URL and DATABASE_URL_DIRECT.
+    4. Run:
+
+         ./scripts/db-setup.sh
+
+3D000
+database does not exist
+
+  The database name in the connection string is incorrect.
+
+ETIMEDOUT / ENOTFOUND
+
+  Usually indicates:
+
+    - Incorrect endpoint
+    - DNS problem
+    - Network restriction
+    - Using an inappropriate direct database connection from a
+      serverless runtime
+
+  The application should normally use the Neon pooled host.
+
+"relation does not exist"
+
+  The application is connecting to a database whose schema has not been
+  pushed/migrated.
+
+  Check that DATABASE_URL and DATABASE_URL_DIRECT point to the intended
+  database, then run the appropriate schema workflow.
+
+"drizzle-kit: url required"
+or
+"dialect undefined"
+
+  Check `drizzle.config.ts`.
+
+  It should load dotenv and provide the database configuration.
+
+  Do not solve this by putting a database URL directly on the command line.
+
+Payment says "not configured"
+
+  Check:
+
+    STRIPE_SECRET_KEY
+    STRIPE_WEBHOOK_SECRET
+
+  For the embedded card form also check:
+
+    NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+
+Webhook returns 400 / Invalid signature
+
+  Check:
+
+    - STRIPE_WEBHOOK_SECRET
+    - Test vs Live mode
+    - Correct Stripe endpoint
+    - Correct endpoint signing secret
+    - Raw request body is being passed to Stripe signature verification
+
+Emails never arrive
+
+  Check:
+
+    RESEND_API_KEY
+    EMAIL_FROM
+
+  Also verify the sending domain in Resend.
+
+Admin login fails after changing ADMIN_*
+
+  Restart the server.
+
+  Confirm both ADMIN_EMAIL and ADMIN_PASSWORD are present.
+
+  The application must be allowed to create/update the corresponding
+  admin configuration during startup/seed behavior.
+
+Uploads disappear after redeploy
+
+  Local disk is ephemeral on many deployment platforms.
+
+  Configure private R2/S3 storage.
+
+Environment change has no effect
+
+  Restart the server.
+
+  Next.js reads environment configuration at startup/build time depending
+  on how the variable is used.
+
+404 vs 500
+
+  404 = missing route/file/resource.
+
+  500 = server-side application/database/runtime error.
+
+  Fix 500 errors first and inspect the final [cause] / stack-trace lines.
+
+================================================================================
+SECTION 10 — NEVER DO
+x Paste DATABASE_URL, passwords, API keys, or secrets into chat.
+
+x Commit .env or .env.local.
+
+x Commit files containing production credentials.
+
+x Hardcode a PostgreSQL connection string in application source.
+
+x Run Drizzle with:
+
+    --url="postgresql://..."
+
+x Put Stripe secret keys in NEXT_PUBLIC_* variables.
+
+x Put Resend or R2 secrets in NEXT_PUBLIC_* variables.
+
+x Expose private PDF/object-storage URLs publicly.
+
+x Run production schema changes without a backup/snapshot strategy.
+
+x Mix drizzle-kit push and migration workflows casually against the
+same database.
+
+x Use the direct Neon host for the normal serverless application runtime.
+
+x Assume local .env values are automatically available on Vercel.
+
+x Deploy live Stripe credentials without testing the complete payment flow.
+
+x Ignore database SSL configuration in production.
+
+x Run production seeding blindly without checking the existing data first.
+
+x Leave preview/admin credentials enabled for a public production deployment.
+
+x Share screenshots containing environment variables or credentials.
+
+================================================================================
+QUICK REFERENCE — ENVIRONMENT VARIABLES
+REQUIRED FOR DATABASE:
+
+  DATABASE_URL
+  DATABASE_URL_DIRECT
+
+REQUIRED FOR PRIVATE ADMIN:
+
+  ADMIN_EMAIL
+  ADMIN_PASSWORD
+
+RECOMMENDED PRODUCTION SECURITY:
+
+  DOWNLOAD_SECRET
+
+SITE:
+
+  SITE_URL
+  NEXT_PUBLIC_SITE_URL
+
+STRIPE:
+
+  STRIPE_SECRET_KEY
+  STRIPE_WEBHOOK_SECRET
+  NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+  ENABLE_DEMO_CHECKOUT
+
+EMAIL:
+
+  RESEND_API_KEY
+  EMAIL_FROM
+
+PRIVATE STORAGE:
+
+  R2_ENDPOINT
+  R2_ACCESS_KEY_ID
+  R2_SECRET_ACCESS_KEY
+  R2_BUCKET
+
+RUNTIME:
+
+  NODE_ENV
+
+================================================================================
+FINAL PRODUCTION CHECK
+Before going live, confirm:
+
+[ ] Database credentials are fresh and working.
+[ ] DATABASE_URL uses the pooled Neon connection.
+[ ] DATABASE_URL_DIRECT is configured for Drizzle.
+[ ] ADMIN_EMAIL and ADMIN_PASSWORD are both configured.
+[ ] Preview admin credentials are no longer being used.
+[ ] DOWNLOAD_SECRET is explicitly configured and backed up.
+[ ] SITE_URL and NEXT_PUBLIC_SITE_URL use the production HTTPS domain.
+[ ] Stripe Test Mode purchase has completed successfully.
+[ ] Production Stripe webhook endpoint is configured.
+[ ] Production STRIPE_WEBHOOK_SECRET matches that endpoint.
+[ ] Resend domain is verified.
+[ ] EMAIL_FROM uses the verified sending domain.
+[ ] R2/S3 storage is private.
+[ ] Uploaded PDFs are not publicly accessible.
+[ ] Database backup/Neon Branch exists before schema changes.
+[ ] `.env` is ignored by Git.
+[ ] No secrets exist in the repository.
+[ ] `npx tsc --noEmit` succeeds.
+[ ] `npm run build` succeeds.
+[ ] `/api/health` returns `{"ok":true}`.
+[ ] Admin login works.
+[ ] A complete production-like checkout flow has been tested.
+
+================================================================================
+Still stuck?
+
+Start at the LAST meaningful line of the stack trace and work upward.
+
+Then run:
+
+ ./scripts/db-setup.sh
+
+Check the database connection, environment variables, and the exact failing
+route before changing code.
+
+================================================================================
+SOFTLY — CONFIGURATION GUIDE
+Designed & developed by Azeemx
+https://www.azeemx.dev
