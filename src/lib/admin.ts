@@ -1,0 +1,20 @@
+import { db } from "@/db";
+import { auditLogs } from "@/db/schema";
+
+export function slugify(value: string) { return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 100); }
+export function adminError(message: string, status = 400) { return Response.json({ error: message }, { status }); }
+export async function audit(userId: string, action: string, resource: string, resourceId?: string, details?: Record<string, unknown>) { await db.insert(auditLogs).values({ userId, action, resource, resourceId, details }); }
+export function parseProduct(body: Record<string, unknown>) {
+  const name = String(body.name || "").trim().slice(0, 150);
+  const slug = slugify(String(body.slug || name));
+  const price = Math.round(Number(body.price) * 100);
+  const salePrice = body.salePrice === "" || body.salePrice == null ? null : Math.round(Number(body.salePrice) * 100);
+  if (name.length < 3 || !slug || !Number.isFinite(price) || price < 0 || (price > 0 && price < 50) || price > 10000000 || (salePrice !== null && (!Number.isFinite(salePrice) || salePrice < 0 || salePrice >= price))) throw new Error("Enter a name, a price of $0 (free) or at least $0.50, and a valid lower sale price.");
+  const type = body.type === "ebook" ? "ebook" : "journal";
+  const author = String(body.author || "").trim().slice(0, 120);
+  const cover = String(body.coverImage || "").trim();
+  if (cover && !cover.startsWith("/uploads/") && !cover.startsWith("/api/media/") && !cover.startsWith("https://")) throw new Error("Invalid cover image URL.");
+  return { name, slug, type, author, subtitle: String(body.subtitle || "").trim().slice(0, 250), description: String(body.description || "").trim().slice(0, 8000), price, salePrice, coverImage: cover || null, theme: String(body.theme || "rose").slice(0, 30), categoryId: body.categoryId ? String(body.categoryId) : null, tags: Array.isArray(body.tags) ? body.tags.map(String).slice(0, 20) : String(body.tags || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 20), includes: Array.isArray(body.includes) ? body.includes.map(String).slice(0, 30) : String(body.includes || "").split("\n").map((x) => x.trim()).filter(Boolean).slice(0, 30), pages: Math.max(0, Math.min(10000, Math.round(Number(body.pages) || 0))), sizes: String(body.sizes || "A4 & US Letter").slice(0, 100), format: "PDF", featured: !!body.featured, bestseller: !!body.bestseller, status: body.status === "published" ? "published" : "draft", seoTitle: String(body.seoTitle || "").trim().slice(0, 180) || null, seoDescription: String(body.seoDescription || "").trim().slice(0, 350) || null, updatedAt: new Date() };
+}
+export function parseCategory(body: Record<string, unknown>) { const name = String(body.name || "").trim().slice(0, 80); const slug = slugify(String(body.slug || name)); if (!name || !slug) throw new Error("A category needs a name."); return { name, slug, description: String(body.description || "").trim().slice(0, 400), color: ["rose", "sage", "lavender", "butter"].includes(String(body.color)) ? String(body.color) : "rose", sortOrder: Math.round(Number(body.sortOrder) || 0) }; }
+export function parseCoupon(body: Record<string, unknown>) { const code = String(body.code || "").trim().toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 40); const type = body.type === "fixed" ? "fixed" : "percentage"; const value = type === "fixed" ? Math.round(Number(body.value) * 100) : Math.round(Number(body.value)); if (!code || !Number.isFinite(value) || value <= 0 || (type === "percentage" && value > 100)) throw new Error("Enter a valid code and discount value."); const expiry = body.expiresAt ? new Date(String(body.expiresAt)) : null; if (expiry && Number.isNaN(expiry.getTime())) throw new Error("Invalid expiry date."); return { code, type, value, minSpend: Math.max(0, Math.round(Number(body.minSpend || 0) * 100)), usageLimit: body.usageLimit ? Math.max(1, Math.round(Number(body.usageLimit))) : null, expiresAt: expiry, active: body.active !== false }; }
