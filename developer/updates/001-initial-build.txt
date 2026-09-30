@@ -1,0 +1,38 @@
+UPDATE 001 — 2026-09-24 — Initial full build: store + admin + database
+=====================================================================
+STATUS: done
+
+WHAT I DID
+  Replaced the bare starter page with a complete digital-journal shop: catalog,
+  cart, checkout, orders, accounts, downloads, admin dashboard, and the
+  PostgreSQL schema behind it. Seeded 8 demo journals with generated PDF files.
+
+FILES CREATED
+  src/db/schema.ts — all tables (users, products, orders, coupons, settings...)
+  src/lib/auth.ts — scrypt passwords, HttpOnly sessions, getAdmin guard, rate limits
+  src/lib/store.ts — queries + first-run seeding of demo catalog
+  src/lib/payments.ts — coupon math + idempotent order fulfillment
+  src/lib/email.ts — Resend sender + HTML layout
+  src/lib/format.ts — browser-safe price/date formatting (no DB import)
+  src/app/(store)/* — home, shop, product, cart, checkout, account, content pages
+  src/components/* — Header, Footer, CartProvider, ProductArt, ProductCard,
+                     AuthForm, ContactForm, FAQAccordion, Newsletter...
+  src/app/admin/* — /admin (guard), /admin/login, /admin/guide
+  src/app/api/admin/* — data, CRUD, upload, images
+  public/images/* — 2 generated editorial photos (hero + story)
+
+FILES UPDATED
+  src/app/page.tsx — DELETED (replaced by src/app/(store)/page.tsx so the
+                     storefront gets its own layout: header/footer/cart)
+  src/app/layout.tsx — root layout: self-hosted fonts, metadata, favicon
+  src/app/globals.css — full design system (colors, type, components, responsive)
+
+WHY
+  Product needed a real shop, not a template. Route group (store) keeps
+  customer chrome separate from admin chrome.
+
+TESTS RUN
+  next typegen / tsc / build / build_and_start : all pass
+
+NEXT STEP
+  3-step checkout + e-books + free content

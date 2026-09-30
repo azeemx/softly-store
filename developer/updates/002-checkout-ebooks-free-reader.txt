@@ -1,0 +1,52 @@
+UPDATE 002 — 2026-09-24 — 3-step checkout, e-books section, free library, reader
+=================================================================================
+STATUS: done
+
+WHAT I DID
+  Reworked checkout into Billing details -> Payment & Review -> Start Reading,
+  with an embedded Stripe card form (and hosted/preview alternatives), tax, and
+  an itemised review table. Added an e-books section + /ebooks page, a /free
+  lead-magnet library, and an in-browser PDF reader with free samples.
+
+FILES CREATED
+  src/lib/checkout.ts — priceCart(): single server-side source of truth for
+                        lines + coupon + tax + total (used by checkout, coupon
+                        API, and pending-order coupon updates)
+  src/lib/access.ts — resolvePurchasedItem(): one authorization path for BOTH
+                      the reader and the download route
+  src/components/CheckoutSteps.tsx — the chevron progress indicator
+  src/components/OrderStatusPoller.tsx — refreshes receipt while webhook confirms
+  src/components/FreeClaimForm.tsx — free item: email -> instant unlock
+  src/components/ClaimGuestOrder.tsx — guest receipt -> account library
+  src/app/read/[id]/page.tsx + /api/read/[id] — full-screen reader (inline PDF,
+                      does NOT spend download credits)
+  src/app/read/sample/[slug]/page.tsx + /api/preview/[slug] — public sample =
+                      first N pages only (pdf-lib page copy)
+  src/app/(store)/ebooks/page.tsx, free/page.tsx — the two new sections/pages
+  src/app/api/cart/quote/route.ts — re-prices a saved bag (anti-tamper)
+  src/app/api/checkout/[id]/route.ts — apply coupon to a pending card PaymentIntent
+  src/app/api/account/claim-order/route.ts — secure guest->account claim
+  src/lib/storage.ts — added multi-page sample PDF generators + buildPreviewPdf()
+
+FILES UPDATED
+  src/db/schema.ts — product.type/author, digitalFiles.previewPages, order.tax,
+                     siteSettings.taxRate/seedVersion (then drizzle-kit push)
+  src/app/api/checkout/route.ts — rewritten: method=card|hosted|preview|free,
+                     PaymentIntent for embedded card, newsletter opt-in capture
+  src/app/api/webhooks/stripe/route.ts — added payment_intent.succeeded handling
+                     with strict amount/session matching
+  src/components/CheckoutClient.tsx — full multi-step UI (replaced single-step)
+  src/components/ProductCard/ProductArt — e-book covers, author, "Free" badge
+  homepage, header, footer, sitemap — new e-books + free entries
+
+WHY
+  Card numbers must never touch our server (PCI) -> Stripe PaymentElement.
+  Samples drive conversion; free items capture emails. Reader is separate from
+  download so reading doesn't burn download credits.
+
+TESTS RUN
+  Verified: 42-page sample download, guest key 403, coupon+tax quote,
+  refund revokes access, sample page counts = admin setting.
+
+NEXT STEP
+  Responsive/UX overhaul

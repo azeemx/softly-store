@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X, Search, UserRound, ShoppingBag, ArrowRight } from "lucide-react";
 import { useCart } from "@/components/CartProvider";
 
-export default function Header({ brandName, logoUrl, announcement, userName }: { brandName: string; logoUrl?: string; announcement: string; userName?: string | null }) {
+export default function Header({ brandName, logoUrl, announcement, userName, links }: { brandName: string; logoUrl?: string; announcement: string; userName?: string | null; links?: { label: string; href: string }[] }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { count } = useCart();
@@ -28,7 +28,8 @@ export default function Header({ brandName, logoUrl, announcement, userName }: {
     };
   }, [menuOpen]);
 
-  const links = [
+  // Menu items are fully admin-managed (Settings -> Site -> Navigation).
+  const menu = links?.length ? links : [
     { href: "/shop", label: "Journals" },
     { href: "/ebooks", label: "E-books" },
     { href: "/free", label: "Free library" },
@@ -44,7 +45,7 @@ export default function Header({ brandName, logoUrl, announcement, userName }: {
           {logoUrl ? <img className="brand-logo" src={logoUrl} alt={brandName} /> : brandName.endsWith(".") ? <>{brandName.slice(0, -1)}<span className="brand-dot">.</span></> : brandName}
         </Link>
         <nav className="nav-links" aria-label="Main navigation">
-          {links.map((link) => (
+          {menu.map((link) => (
             <Link
               key={link.href}
               className={pathname === link.href || (link.href === "/shop" && pathname.startsWith("/products/")) ? "active" : ""}
@@ -121,7 +122,7 @@ export default function Header({ brandName, logoUrl, announcement, userName }: {
 
       {menuOpen && (
         <nav className="mobile-nav" aria-label="Mobile navigation">
-          {links.map((link) => (
+          {menu.map((link) => (
             <Link key={link.href} href={link.href} onClick={() => setMenuOpen(false)}>
               <span>{link.label}</span>
               <ArrowRight size={15} color="#8a9b8f" />

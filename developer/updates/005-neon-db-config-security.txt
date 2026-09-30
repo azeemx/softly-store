@@ -1,0 +1,44 @@
+UPDATE 005 — 2026-09-25 — Neon/Drizzle wiring, env secrets, security pass
+=========================================================================
+STATUS: done
+
+WHAT I DID
+  Made `drizzle-kit push` work with zero CLI flags, added a DB setup script,
+  moved admin credentials + link-signing secret into env, and scanned the repo
+  for leaked secrets.
+
+FILES CREATED
+  drizzle.config.ts — dotenv + process.env.DATABASE_URL (JSON config cannot
+                      read env, so this is what fixes "url required" forever)
+  .env — DATABASE_URL (note: host rewrites this file, see 006)
+  scripts/db-setup.sh — connectivity check -> drizzle push -> table/row counts.
+                        Never prints the URL; maps errors (28P01/3D000/timeout)
+                        to a fix. Uses --force automatically when non-TTY.
+  config.txt — EVERY env var: what it is, where to get it, ProTip, plus
+               verification checklist and NEVER-DO list.
+
+FILES DELETED
+  drizzle.config.json — replaced by the .ts version (kept both = ambiguity)
+
+FILES UPDATED
+  .env.example — Neon pooled-vs-direct guidance + sslmode=verify-full
+  README.md — points at config.txt and scripts/db-setup.sh
+
+SECURITY
+  - .env chmod 600, gitignored, no .git repo exists (nothing was ever pushed)
+  - Secret scan: npg_/sk_live_/sk_test_ found ONLY in .env + doc placeholders
+  - ADMIN_EMAIL/ADMIN_PASSWORD set -> public preview admin auto-disabled (verified 401)
+  - DOWNLOAD_SECRET added so rotating the DB password no longer invalidates links
+
+IMPORTANT FINDING
+  The Neon connection string pasted in chat was REJECTED by the server
+  (28P01 password authentication failed) => it was rotated/stale. Active
+  DATABASE_URL therefore stayed on the working local DB, with ready-to-activate
+  Neon lines staged in .env. Rotate in Neon -> Roles, paste, run db-setup.sh.
+
+TESTS RUN
+  next typegen / tsc / build / build_and_start : pass
+  db-setup.sh : connects, 19 tables, seeds verified
+
+NEXT STEP
+  No-code admin panel (draft -> preview -> publish)

@@ -1,0 +1,37 @@
+UPDATE 003 — 2026-09-25 — Full responsive/UX overhaul (360px -> ultrawide)
+==========================================================================
+STATUS: done
+
+WHAT I DID
+  Rewrote the entire stylesheet with clamp()-based fluid type, safer grids, and
+  six breakpoints (1200/1024/860/768/520/360) plus touch + reduced-motion rules.
+  Made the header sticky with a scroll-locked mobile drawer, and gave the reader
+  theme toggles + fullscreen.
+
+FILES UPDATED
+  src/app/globals.css — REWRITTEN (single file, ~1400 lines): fluid spacing via
+      clamp(), grid collapse rules, sticky header, focus-visible rings,
+      100dvh handling for mobile browsers, prefers-reduced-motion.
+  src/components/Header.tsx — rewritten: sticky, closes menu on route change,
+      body scroll lock while drawer open, active link underline, search form.
+  src/components/ReaderShell.tsx — converted to client: dark/sepia/light themes,
+      fullscreen toggle, Esc to exit, mobile button labels.
+  src/app/(store)/ebooks/page.tsx, free/page.tsx — rebuilt for fluid layout.
+
+FILES CREATED
+  public/images/logo.svg — small vector mark for the header/footer
+
+WHY
+  Instagram/Pinterest/TikTok traffic arrives mostly on phones; several layouts
+  (cart, checkout, admin tables, reader bar) broke below 520px. Consolidating
+  media queries into one file makes future breakpoints predictable.
+
+FILES DELETED
+  (none — old media-query blocks were replaced inside globals.css)
+
+RISKS & NOTES
+  Only ONE stylesheet holds layout rules. Don't append a second copy of the
+  same breakpoint block — edit the existing one.
+
+NEXT STEP
+  Creator credit + repo hygiene files

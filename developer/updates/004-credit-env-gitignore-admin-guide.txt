@@ -1,0 +1,30 @@
+UPDATE 004 — 2026-09-25 — Creator credit (.env/.gitignore) + admin guide
+========================================================================
+STATUS: done
+
+WHAT I DID
+  Printed the author credit on every page (footer) linking to www.azeemx.dev.
+  Added repo hygiene files and an admin-only operating guide.
+
+FILES CREATED
+  .env.example — documented template of every environment variable
+  .gitignore — ignores .env*, .next, node_modules, private/media uploads
+  ADMIN_GUIDE.md — markdown copy of the operating guide
+  src/app/admin/guide/page.tsx — IN-APP guide (admin only; anon -> 307 login)
+
+FILES UPDATED
+  src/components/Footer.tsx — added "Designed & developed by Azeemx" credit
+  src/components/admin/AdminApp.tsx — sidebar link to /admin/guide + credit
+  src/app/globals.css — .footer-credit hover styles
+  README.md — points to config.txt and scripts/db-setup.sh
+
+WHY
+  Credit must be visible but subtle; guide must live in the repo AND inside the
+  panel so operators don't need a separate document.
+
+RISKS & NOTES
+  /admin/guide checks getAdmin() server-side — verify with curl that an
+  anonymous request returns 307 with NO guide content if you touch it.
+
+NEXT STEP
+  Environment + database wiring

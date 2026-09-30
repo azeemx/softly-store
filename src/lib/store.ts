@@ -1,7 +1,8 @@
 import { asc, desc, eq, and, ilike, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { categories, coupons, digitalFiles, faqs, productImages, products, siteSettings, testimonials, users } from "@/db/schema";
-import { hashPassword, isDemoMode, verifyPassword } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { getAdmin, hashPassword, isDemoMode, verifyPassword } from "@/lib/auth";
 import { ensureSampleEbookPdf, ensureSamplePdf } from "@/lib/storage";
 
 const ebookSeeds = [
@@ -57,7 +58,7 @@ async function seed() {
       const sample = await ensureSamplePdf(item.slug, item.name, item.pages);
       const [existingFile] = await db.select().from(digitalFiles).where(eq(digitalFiles.productId, product.id)).limit(1);
       if (!existingFile && firstRun) await db.insert(digitalFiles).values({ productId: product.id, storageKey: sample.storageKey, originalName: `${item.slug}.pdf`, sizeBytes: sample.sizeBytes, maxDownloads: 5, expiryDays: 30 }).onConflictDoNothing();
-      else if (existingFile.storageKey.startsWith("local:samples/") && existingFile.storageKey !== sample.storageKey) await db.update(digitalFiles).set({ storageKey: sample.storageKey, sizeBytes: sample.sizeBytes }).where(eq(digitalFiles.id, existingFile.id));
+      else if (existingFile && existingFile.storageKey.startsWith("local:samples/") && existingFile.storageKey !== sample.storageKey) await db.update(digitalFiles).set({ storageKey: sample.storageKey, sizeBytes: sample.sizeBytes }).where(eq(digitalFiles.id, existingFile.id));
     }
   }
   const [versionRow] = await db.select({ seedVersion: siteSettings.seedVersion }).from(siteSettings).where(eq(siteSettings.id, 1)).limit(1);
@@ -110,7 +111,41 @@ export async function ensureSeeded() {
   return seedPromise;
 }
 
-export async function getSettings() { await ensureSeeded(); const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1)); return settings; }
+// Default (code-level) site structure. The admin can override any of these in
+// Settings -> Site without touching code; these only apply when nothing is saved yet.
+export const DEFAULT_NAV = [
+  { label: "Journals", href: "/shop" },
+  { label: "E-books", href: "/ebooks" },
+  { label: "Free library", href: "/free" },
+  { label: "Categories", href: "/categories" },
+  { label: "Our story", href: "/about" },
+];
+export const DEFAULT_FOOTER = [
+  { title: "Explore", links: [{ label: "Journals", href: "/shop" }, { label: "E-books", href: "/ebooks" }, { label: "Free library", href: "/free" }, { label: "Categories", href: "/categories" }, { label: "Our story", href: "/about" }, { label: "FAQs", href: "/faq" }] },
+  { title: "Here to help", links: [{ label: "Contact us", href: "/contact" }, { label: "My account", href: "/account" }, { label: "My downloads", href: "/account" }] },
+  { title: "The fine print", links: [{ label: "Privacy policy", href: "/policies/privacy" }, { label: "Terms & conditions", href: "/policies/terms" }, { label: "Refund policy", href: "/policies/refunds" }] },
+];
+// Homepage section ids in their default order. Toggle + reorder in the admin.
+export const DEFAULT_SECTIONS = ["categories", "journal", "ebooks", "free", "story", "how", "quote", "faq"];
+
+/**
+ * Reads site settings. When an admin has enabled "preview draft" (signed-in admin
+ * with the preview cookie), unpublished draft values are merged over the live ones,
+ * so changes can be reviewed before publishing — no redeploy, purely DB-driven.
+ */
+export async function getSettings() {
+  await ensureSeeded();
+  const [settings] = await db.select().from(siteSettings).where(eq(siteSettings.id, 1));
+  if (!settings) return settings;
+  try {
+    const cookieStore = await cookies();
+    if (cookieStore.get("softly_preview")?.value === "1") {
+      const admin = await getAdmin();
+      if (admin && settings.settingsDraft) return { ...settings, ...settings.settingsDraft } as typeof settings;
+    }
+  } catch { /* No request context (build/CLI) -> live settings only. */ }
+  return settings;
+}
 export async function getCategories() { await ensureSeeded(); return db.select().from(categories).orderBy(asc(categories.sortOrder), asc(categories.name)); }
 export async function getFaqs() { await ensureSeeded(); return db.select().from(faqs).where(eq(faqs.active, true)).orderBy(asc(faqs.sortOrder)); }
 export async function getTestimonials() { await ensureSeeded(); return db.select().from(testimonials).where(eq(testimonials.active, true)); }

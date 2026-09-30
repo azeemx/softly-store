@@ -1,0 +1,76 @@
+UPDATE 006 — 2026-09-25 — No-code admin panel: draft/preview/publish, nav, sections
+====================================================================================
+STATUS: done
+
+WHAT I DID
+  Turned /admin into a true no-code site manager: the admin can now edit the
+  header menu, footer columns, hero buttons and the homepage layout, review
+  everything in preview mode, then publish instantly — no code, no redeploy.
+  All edits now save to a DRAFT first (requirement: preview before publishing).
+
+FILES CREATED
+  src/components/admin/SiteEditors.tsx — NavEditor (header links + footer
+      columns: add/rename/reorder/remove) and SectionsBuilder (show/hide +
+      reorder homepage bands with arrows).
+  src/components/PreviewBar.tsx — floating bar shown ONLY to a signed-in admin
+      while previewing a draft: Publish / Discard / Dashboard / Exit.
+  src/app/api/admin/preview/route.ts — admin-only GET that sets/clears the
+      httpOnly "softly_preview" cookie and redirects.
+  developer/README.md — index + the update-log rule/template
+  developer/ARCHITECTURE.md — file-by-file map of all 89 source files
+  developer/NEXT-STEPS.md — roadmap, feature ideas, gotchas, quick answers
+  developer/updates/*.txt — this log series (one file per update)
+  scripts/devlog.sh — `./scripts/devlog.sh "title"` creates the next log file
+
+FILES UPDATED
+  src/db/schema.ts — added nav_items, footer_links, homepage_sections (jsonb),
+      hero_primary/secondary label+href (text), settings_draft (jsonb),
+      draft_updated_at  -> then `drizzle-kit push --force`
+  src/lib/store.ts — getSettings() now merges settings_draft over live values
+      ONLY when a signed-in admin has the preview cookie; added DEFAULT_NAV,
+      DEFAULT_FOOTER, DEFAULT_SECTIONS fallbacks.
+  src/app/api/admin/[resource]/route.ts — PUT rewritten: default mode is now
+      "draft" (edits never touch live), explicit mode:"publish" copies draft ->
+      live and clears it, mode:"discard" throws the draft away. Validates
+      hex colors, image paths, nav/footer arrays, section ids, tax rate.
+  src/app/(store)/layout.tsx — passes DB nav/footer to Header/Footer, renders
+      PreviewBar for admins in preview mode, metadata from settings.
+  src/components/Header.tsx — menu comes from a `links` prop (DB-driven).
+  src/components/Footer.tsx — columns come from a `columns` prop (DB-driven).
+  src/app/(store)/page.tsx — hero uses admin button labels/links; homepage is
+      now an ordered map rendered from settings.homepageSections.
+  src/components/admin/AdminApp.tsx — two new Content tabs ("Navigation &
+      footer", "Homepage sections"), draft-aware topbar with Preview/Publish/
+      Discard, saveSettings/publishDraft/discardDraft helpers.
+  src/components/admin/Editors.tsx — hero button fields added to the home tab;
+      save confirmation now says "saved to draft ... preview ... publish".
+  src/app/globals.css — .draft-bar, .preview-bar, .section-row styles.
+
+BEFORE / AFTER
+  before: menu/footer/hero buttons/homepage order were hardcoded in JSX; every
+          site text change required an edit + rebuild + redeploy.
+  after:  all of it lives in site_settings; edits go to a draft, are previewed
+          on the real storefront (admin only), and publish instantly.
+
+TESTS RUN
+  npx next typegen : pass
+  npx tsc --noEmit : pass
+  npm run build     : pass
+  build_and_start   : pass  (health {"ok":true})
+  Workflow smoke: draft saved (live unchanged) -> preview cookie shows draft ->
+                  anon still sees live -> publish updates live immediately ->
+                  discard works -> empty discard handled -> defaults restored.
+
+RISKS & NOTES
+  * Preview merge must stay admin-gated. If a normal visitor ever sees draft
+    content, getSettings() authorization is broken — treat as P0.
+  * Setting a homepageSections id that isn't in the allowed list is silently
+    filtered (defensive) — a typo hides the section, not an error.
+  * NAV/FOOTER/HERO defaults are in code (DEFAULT_* in store.ts) and only apply
+    when nothing is saved; once the admin saves, the DB wins.
+  * The host REWRITES .env on restart -> admin creds moved to .env.local
+    (verified surviving a restart). Documented in config.txt.
+
+NEXT STEP
+  See developer/NEXT-STEPS.md item 1: production payments (rotate Neon
+  password into .env.local, add Stripe keys + webhook, real purchase test).
